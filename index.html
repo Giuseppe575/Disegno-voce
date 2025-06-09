@@ -19,112 +19,121 @@
   <div id="debug">Comando riconosciuto: ...</div>
   <canvas id="canvas" width="1000" height="1200"></canvas>
 
-  <script>
-    const canvas = document.getElementById("canvas");
-    const ctx = canvas.getContext("2d");
-    let x = 100, y = 100;
-    let spessore = 20;
-    let recognition;
+<script>
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+  let x = 100, y = 100;
+  let spessore = 20;
+  let recognition;   // variabile globale
 
-    function disegnaGriglia() {
-      ctx.strokeStyle = "#e0e0e0";
-      ctx.lineWidth = 1;
-      for (let i = 0; i < canvas.width; i += 100) {
-        ctx.beginPath();
-        ctx.moveTo(i, 0);
-        ctx.lineTo(i, canvas.height);
-        ctx.stroke();
-      }
-      for (let j = 0; j < canvas.height; j += 100) {
-        ctx.beginPath();
-        ctx.moveTo(0, j);
-        ctx.lineTo(canvas.width, j);
-        ctx.stroke();
-      }
+  function disegnaGriglia() {
+    ctx.strokeStyle = "#e0e0e0";
+    ctx.lineWidth = 1;
+    for (let i = 0; i < canvas.width; i += 100) {
+      ctx.beginPath();
+      ctx.moveTo(i, 0);
+      ctx.lineTo(i, canvas.height);
+      ctx.stroke();
     }
-
-    function pulisciCanvas() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      disegnaGriglia();
-      x = 100;
-      y = 100;
+    for (let j = 0; j < canvas.height; j += 100) {
+      ctx.beginPath();
+      ctx.moveTo(0, j);
+      ctx.lineTo(canvas.width, j);
+      ctx.stroke();
     }
+  }
 
-    function salvaPNG() {
-      const link = document.createElement("a");
-      link.download = "disegno_vocale.png";
-      link.href = canvas.toDataURL("image/png");
-      link.click();
-    }
-
+  function pulisciCanvas() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     disegnaGriglia();
+    x = 100; y = 100;
+  }
 
-    function startListening() {
-      recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-      recognition.lang = "it-IT";
-      recognition.interimResults = false;
-      recognition.continuous = false; // usiamo onend per rilanciare
+  function salvaPNG() {
+    const link = document.createElement("a");
+    link.download = "disegno_vocale.png";
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+  }
 
-      recognition.onresult = function(event) {
-        const comando = event.results[0][0].transcript.toLowerCase();
-        document.getElementById("debug").innerText = "Comando riconosciuto: " + comando;
+  disegnaGriglia();
 
-        if (comando.includes("stanza") && comando.match(/\d+/g)) {
-          const numeri = comando.match(/\d+/g);
-          if (numeri.length >= 2) {
-            const larghezza = parseFloat(numeri[0]) * 100;
-            const altezza = parseFloat(numeri[1]) * 100;
+  function startListening() {
+    // se già in ascolto, non ristartare
+    if (recognition && recognition.recognizing) return;
 
-            ctx.fillStyle = "black";
-            ctx.fillRect(x, y, larghezza, spessore);
-            ctx.fillRect(x + larghezza - spessore, y, spessore, altezza);
-            ctx.fillRect(x, y + altezza - spessore, larghezza, spessore);
-            ctx.fillRect(x, y, spessore, altezza);
+    recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.lang = "it-IT";
+    recognition.interimResults = false;
+    recognition.continuous = true;    // ASCOLTO CONTINUO
 
-            ctx.fillStyle = "blue";
-            ctx.font = "14px Arial";
-            ctx.fillText(`${numeri[0]} m`, x + larghezza / 2 - 10, y - 5);
-            ctx.fillText(`${numeri[1]} m`, x + larghezza + 5, y + altezza / 2);
+    recognition.onstart = () => {
+      recognition.recognizing = true;
+      document.getElementById("debug").innerText = "🎤 Ascolto attivo...";
+    };
 
-            x += larghezza;
-            y += altezza;
-          }
-          return;
-        }
+    recognition.onresult = function(event) {
+      const comando = event.results[event.results.length - 1][0].transcript.trim().toLowerCase();
+      document.getElementById("debug").innerText = "Comando riconosciuto: " + comando;
 
-        if (comando.includes("inizia") && comando.match(/\d+/g)) {
-          const numeri = comando.match(/\d+/g);
-          if (numeri.length >= 2) {
-            x = parseInt(numeri[0]);
-            y = parseInt(numeri[1]);
-            ctx.beginPath();
-            ctx.fillStyle = "red";
-            ctx.arc(x, y, 5, 0, 2 * Math.PI);
-            ctx.fill();
-            window.scrollTo({ top: y - 200, behavior: "smooth" });
-          }
-          return;
-        }
+      // --- COMANDO STANZA X PER Y ---
+      if (comando.includes("stanza") && comando.match(/\d+/g)) {
+        const [L, A] = comando.match(/\d+/g).map(n => parseFloat(n));
+        const larghezza = L * 100, altezza = A * 100;
+        // quattro lati
+        ctx.fillStyle = "black";
+        ctx.fillRect(x, y, larghezza, spessore);
+        ctx.fillRect(x + larghezza - spessore, y, spessore, altezza);
+        ctx.fillRect(x, y + altezza - spessore, larghezza, spessore);
+        ctx.fillRect(x, y, spessore, altezza);
+        // etichette
+        ctx.fillStyle = "blue";
+        ctx.font = "14px Arial";
+        ctx.fillText(`${L} m`, x + larghezza/2 - 10, y - 5);
+        ctx.fillText(`${A} m`, x + larghezza + 5, y + altezza/2);
+        x += larghezza; 
+        y += altezza;
+        return;
+      }
 
-        if (comando.includes("imposta spessore")) {
-          const match = comando.match(/\d+/);
-          if (match) spessore = parseInt(match[0]);
-          return;
-        }
-      };
+      // --- COMANDO INIZIA X Y ---
+      if (comando.includes("inizia") && comando.match(/\d+/g)?.length >= 2) {
+        const [X0, Y0] = comando.match(/\d+/g).map(n => parseInt(n));
+        x = X0; y = Y0;
+        ctx.beginPath();
+        ctx.fillStyle = "red";
+        ctx.arc(x, y, 5, 0, 2*Math.PI);
+        ctx.fill();
+        window.scrollTo({ top: y - 200, behavior: "smooth" });
+        return;
+      }
 
-      recognition.onerror = function(event) {
-        console.error("Errore:", event.error);
+      // --- COMANDO IMPOSTA SPESSORE N ---
+      if (comando.includes("imposta spessore") && comando.match(/\d+/)) {
+        spessore = parseInt(comando.match(/\d+/)[0]);
+        return;
+      }
+
+      // altri comandi...
+    };
+
+    recognition.onerror = function(event) {
+      // Ignora no-speech/aborted, riporta errori diversi
+      if (event.error !== 'no-speech' && event.error !== 'aborted') {
         document.getElementById("debug").innerText = "Errore: " + event.error;
-      };
+        console.error("SpeechRecognition error:", event.error);
+      }
+    };
 
-      recognition.onend = function() {
-        // Rilancia ascolto per renderlo continuo
-        recognition.start();
-      };
+    recognition.onend = () => {
+      recognition.recognizing = false;
+      // NON fare recognition.start() qui: continuous = true lo mantiene attivo
+      document.getElementById("debug").innerText = "🎤 Ascolto terminato. Premi di nuovo se serve.";
+    };
 
-      recognition.start();
-    }
-  </script>
+    recognition.start();
+  }
+</script>
+
 </body>
 </html>
